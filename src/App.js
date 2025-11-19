@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
+import Login from "./Login";
+import { FiLogOut } from "react-icons/fi";
 
 export default function MadaPerfectApp() {
+  const [logged, setLogged] = useState(
+  localStorage.getItem("mp_logged") === "yes"
+);
+function logout() {
+  localStorage.removeItem("mp_logged");
+  setLogged(false);
+}
 
   /* ============================
       1) VIEW PRINCIPALE
@@ -470,11 +479,24 @@ export default function MadaPerfectApp() {
     return Number(n || 0).toFixed(2);
   }
 
+if (!logged) {
+  return <Login onLogin={() => setLogged(true)} />;
+}
+
   // --- UI / RENDER ---
   return (
-    <div className="min-h-screen bg-gray-100 font-sans text-gray-800">
-      <div className="flex">
-        <aside className="w-72 bg-indigo-900 text-white min-h-screen p-6">
+    <div className="min-h-screen bg-gray-100 text-gray-800">
+    {/* Bouton déconnexion FIXÉ EN HAUT DROIT */}
+    <button
+      onClick={logout}
+      className="fixed top-4 right-4 bg-white shadow-lg p-3 rounded-full hover:bg-gray-100 z-50"
+      title="Déconnexion"
+    >
+      <FiLogOut size={22} />
+    </button>
+
+    <div className="flex">
+      <aside className="w-72 bg-indigo-900 text-white min-h-screen p-6">
           <div className="text-2xl font-bold mb-6">MadaPerfect</div>
           <nav className="space-y-3">
             <button onClick={() => setView('dashboard')} className={`w-full text-left px-3 py-2 rounded ${view==='dashboard' ? 'bg-indigo-700' : ''}`}>Tableau de bord</button>
@@ -486,6 +508,18 @@ export default function MadaPerfectApp() {
         </aside>
 
         <main className="flex-1 p-6">
+
+          <div className="flex justify-between items-center mb-6">
+  <h1 className="text-2xl font-bold">MadaPerfect</h1>
+
+  <button
+    onClick={logout}
+    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+  >
+    Déconnexion
+  </button>
+</div>
+
           {/* Header + search */}
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-semibold">
