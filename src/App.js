@@ -1,24 +1,34 @@
 import React, { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
-import Login from "./Login";
 import { FiLogOut } from "react-icons/fi";
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import Login from "./Login";
 
 export default function MadaPerfectApp() {
-  const [logged, setLogged] = useState(
-  localStorage.getItem("mp_logged") === "yes"
-);
-function logout() {
-  localStorage.removeItem("mp_logged");
-  setLogged(false);
-}
 
   /* ============================
-      1) VIEW PRINCIPALE
+      AUTH (LOGIN)
+  ============================ */
+  const [logged, setLogged] = useState(
+    localStorage.getItem("mp_logged") === "yes"
+  );
+
+  function logout() {
+    localStorage.removeItem("mp_logged");
+    setLogged(false);
+  }
+
+  if (!logged) {
+    return <Login onLogin={() => setLogged(true)} />;
+  }
+
+  /* ============================
+      VIEW PRINCIPALE
   ============================ */
   const [view, setView] = useState("dashboard");
 
   /* ============================
-      2) ENTREPRISE
+      ENTREPRISE
   ============================ */
   const [company, setCompany] = useState(() => {
     try {
@@ -36,25 +46,90 @@ function logout() {
   });
 
   /* ============================
-      3) PRODUITS
+      FIRESTORE : ARTICLES
   ============================ */
-  const [products, setProducts] = useState(() =>
-    JSON.parse(localStorage.getItem("mp_products") || "[]")
-  );
-
+  const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState("");
 
-  const emptyProduct = {
+  const [productForm, setProductForm] = useState({
     id: null,
     name: "",
+    description: "",
     price: "",
     image: "",
-    description: "",
     link: "",
-  };
+  });
 
-  const [productForm, setProductForm] = useState(emptyProduct);
   const [editingProduct, setEditingProduct] = useState(false);
+
+  // --- Charger les articles Firestore
+  async function loadProducts() {
+    const querySnap = await getDocs(collection(db, "articles"));
+    const list = querySnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    setProducts(list);
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  // --- Ajouter article Firestore
+  async function saveProductFirestore() {
+    if (!productForm.name) return alert("Nom requis");
+
+    if (editingProduct) {
+      await updateDoc(doc(db, "articles", productForm.id), {
+        name: productForm.name,
+        price: productForm.price,
+        description: productForm.description,
+        link: productForm.link,
+        image: productForm.image
+      });
+    } else {
+      await addDoc(collection(db, "articles"), {
+        name: productForm.name,
+        price: productForm.price,
+        description: productForm.description,
+        link: productForm.link,
+        image: productForm.image
+      });
+    }
+
+    setProductForm({
+      id: null,
+      name: "",
+      description: "",
+      price: "",
+      image: "",
+      link: ""
+    });
+
+    setEditingProduct(false);
+    loadProducts();
+  }
+
+  function startEditProduct(p) {
+    setEditingProduct(true);
+    setProductForm(p);
+  }
+
+  async function deleteProduct(id) {
+    if (!confirm("Supprimer cet article ?")) return;
+    await deleteDoc(doc(db, "articles", id));
+    loadProducts();
+  }
+
+  function cancelProduct() {
+    setProductForm({
+      id: null,
+      name: "",
+      description: "",
+      price: "",
+      image: "",
+      link: ""
+    });
+    setEditingProduct(false);
+  }
 
   function handleProductImage(file) {
     if (!file) return;
@@ -63,66 +138,58 @@ function logout() {
       setProductForm((p) => ({ ...p, image: e.target.result }));
     reader.readAsDataURL(file);
   }
-
-  function startEditProduct(p) {
-    setProductForm(p);
-    setEditingProduct(true);
-    setView("articles");
-  }
-
-  function cancelProduct() {
-    setProductForm(emptyProduct);
-    setEditingProduct(false);
-  }
-
-  function saveProduct() {
-    if (!productForm.name) return alert("Nom du produit requis");
-
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((x) => (x.id === productForm.id ? { ...productForm } : x))
-      );
-    } else {
-      setProducts((prev) => [
-        ...prev,
-        { ...productForm, id: Date.now() },
-      ]);
-    }
-
-    cancelProduct();
-  }
-
-  function deleteProduct(id) {
-    if (confirm("Supprimer ce produit ?"))
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-  }
-
   /* ============================
-      4) CLIENTS
+      FIRESTORE : CLIENTS
   ============================ */
-  const [clients, setClients] = useState(() =>
-    JSON.parse(localStorage.getItem("mp_clients") || "[]")
-  );
+  const [clients, setClients] = useState([]);
+  const [clientForm, setClientForm] = useState({
+    id: null,
+    name: "",
+    email: "",
+    phone: "",
+    address: ""
+  });
 
-  const emptyClient = { id: null, name: "", email: "", phone: "", address: "" };
+  async function loadClients() {
+    const q = await getDocs(collection(db, "clients"));
+    const list = q.docs.map(d => ({ id: d.id, ...d.data() }));
+    setClients(list);
+  }
 
-  const [clientForm, setClientForm] = useState(emptyClient);
+  useEffect(() => {
+    // load products was started in PART 1; we also load clients & invoices here
+    loadClients();
+    loadInvoices();
+  }, []);
 
-  function saveClient() {
+  async function saveClientFirestore() {
     if (!clientForm.name) return alert("Nom du client requis");
 
     if (clientForm.id) {
-      setClients((prev) =>
-        prev.map((c) => (c.id === clientForm.id ? clientForm : c))
-      );
+      await updateDoc(doc(db, "clients", clientForm.id), {
+        name: clientForm.name,
+        email: clientForm.email,
+        phone: clientForm.phone,
+        address: clientForm.address
+      });
     } else {
-      setClients((prev) => [
-        ...prev,
-        { ...clientForm, id: Date.now() },
-      ]);
+      await addDoc(collection(db, "clients"), {
+        name: clientForm.name,
+        email: clientForm.email,
+        phone: clientForm.phone,
+        address: clientForm.address
+      });
     }
 
-    setClientForm(emptyClient);
+    setClientForm({ id: null, name: "", email: "", phone: "", address: "" });
+    loadClients();
+    setView("clients");
+  }
+
+  async function deleteClientFirestore(id) {
+    if (!confirm("Supprimer ce client ?")) return;
+    await deleteDoc(doc(db, "clients", id));
+    loadClients();
   }
 
   function editClient(c) {
@@ -130,21 +197,14 @@ function logout() {
     setView("clients");
   }
 
-  function deleteClient(id) {
-    if (confirm("Supprimer ce client ?"))
-      setClients((prev) => prev.filter((c) => c.id !== id));
-  }
   /* ============================
-      5) FACTURES
+      FIRESTORE : FACTURES
   ============================ */
-  const [invoices, setInvoices] = useState(() =>
-    JSON.parse(localStorage.getItem("mp_invoices") || "[]")
-  );
-
+  const [invoices, setInvoices] = useState([]);
   const [invoiceSearch, setInvoiceSearch] = useState("");
-
   const [editingInvoice, setEditingInvoice] = useState(false);
 
+  // invoiceDraft already defined in PART 1? If not, define default here (but PART 1 defined product-related states; ensure invoiceDraft exists)
   const [invoiceDraft, setInvoiceDraft] = useState({
     id: null,
     clientId: null,
@@ -157,14 +217,17 @@ function logout() {
     number: ""
   });
 
-  /* ---------------------------
-      Ajouter un produit au draft
-  ----------------------------*/
-  function addItemToDraft(productId) {
-    const prod = products.find((p) => p.id === productId);
-    if (!prod) return;
+  async function loadInvoices() {
+    const q = await getDocs(collection(db, "invoices"));
+    const list = q.docs.map(d => ({ id: d.id, ...d.data() }));
+    setInvoices(list);
+  }
 
-    setInvoiceDraft((d) => ({
+  // add item to draft (local only)
+  function addItemToDraft(productId) {
+    const prod = products.find((p) => p.id === productId || String(p.id) === String(productId));
+    if (!prod) return;
+    setInvoiceDraft(d => ({
       ...d,
       items: [
         ...d.items,
@@ -173,86 +236,23 @@ function logout() {
           productId: prod.id,
           name: prod.name,
           qty: 1,
-          price: Number(prod.price || 0),
-        },
-      ],
+          price: Number(prod.price || 0)
+        }
+      ]
     }));
   }
 
   function updateItemQty(itemId, qty) {
-    setInvoiceDraft((d) => ({
+    setInvoiceDraft(d => ({
       ...d,
-      items: d.items.map((it) =>
-        it.id === itemId ? { ...it, qty: Number(qty) } : it
-      ),
+      items: d.items.map(it => it.id === itemId ? { ...it, qty: Number(qty) } : it)
     }));
   }
 
   function removeItemFromDraft(itemId) {
-    setInvoiceDraft((d) => ({
-      ...d,
-      items: d.items.filter((it) => it.id !== itemId),
-    }));
+    setInvoiceDraft(d => ({ ...d, items: d.items.filter(it => it.id !== itemId) }));
   }
 
-  /* ---------------------------
-      CRÉATION NOUVELLE FACTURE
-  ----------------------------*/
-  function saveInvoice() {
-    if (!invoiceDraft.clientId)
-      return alert("Sélectionner un client");
-
-    const inv = {
-      ...invoiceDraft,
-      id: Date.now(),
-      number: `INV-${Date.now()}`,
-    };
-
-    setInvoices((prev) => [...prev, inv]);
-
-    resetInvoiceDraft();
-    setView("invoices");
-  }
-
-  /* ---------------------------
-      MODE ÉDITION FACTURE
-  ----------------------------*/
-  function startEditInvoice(inv) {
-    setInvoiceDraft({
-      id: inv.id,
-      clientId: inv.clientId,
-      items: inv.items,
-      type: inv.type,
-      date: inv.date,
-      deliveryDate: inv.deliveryDate || "",
-      deliveryAddress: inv.deliveryAddress || "",
-      paid: inv.paid || 0,
-      number: inv.number
-    });
-
-    setEditingInvoice(true);
-    setView("invoices");
-  }
-
-  /* ---------------------------
-      SAUVEGARDER MODIFICATION
-  ----------------------------*/
-  function updateInvoice() {
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.number === invoiceDraft.number ? { ...invoiceDraft } : inv
-      )
-    );
-
-    alert("Facture mise à jour !");
-    setEditingInvoice(false);
-
-    resetInvoiceDraft();
-  }
-
-  /* ---------------------------
-      RESET FACTURE DRAFT
-  ----------------------------*/
   function resetInvoiceDraft() {
     setInvoiceDraft({
       id: null,
@@ -268,37 +268,97 @@ function logout() {
   }
 
   /* ---------------------------
-      PAIEMENT FACTURE
+      SAVE NEW INVOICE -> Firestore
   ----------------------------*/
-  function editInvoice(inv) {
-    const nouveauPaiement = Number(
-      prompt("Montant payé par le client (en Ariary) :", inv.paid || 0)
-    );
+  async function saveInvoiceFirestore() {
+    if (!invoiceDraft.clientId) return alert("Sélectionner un client");
 
+    const invToSave = {
+      ...invoiceDraft,
+      date: invoiceDraft.date || new Date().toISOString().slice(0,10),
+      number: invoiceDraft.number || `INV-${Date.now()}`
+    };
+
+    // create in firestore
+    const ref = await addDoc(collection(db, "invoices"), invToSave);
+
+    // Optionally write the generated id to the document (not required, but convenient)
+    await updateDoc(ref, { id: ref.id });
+
+    loadInvoices();
+    resetInvoiceDraft();
+    setView("invoices");
+  }
+
+  /* ---------------------------
+      START EDIT INVOICE (load draft)
+  ----------------------------*/
+  function startEditInvoice(inv) {
+    setInvoiceDraft({
+      id: inv.id,
+      clientId: inv.clientId,
+      items: inv.items,
+      type: inv.type,
+      date: inv.date,
+      deliveryDate: inv.deliveryDate || "",
+      deliveryAddress: inv.deliveryAddress || "",
+      paid: inv.paid || 0,
+      number: inv.number || ""
+    });
+    setEditingInvoice(true);
+    setView("invoices");
+  }
+
+  /* ---------------------------
+      UPDATE INVOICE -> Firestore
+  ----------------------------*/
+  async function updateInvoiceFirestore() {
+    if (!invoiceDraft.id) return alert("Invoice id manquant");
+    const id = invoiceDraft.id;
+    const docRef = doc(db, "invoices", id);
+    await updateDoc(docRef, { ...invoiceDraft });
+    alert("Facture mise à jour !");
+    setEditingInvoice(false);
+    loadInvoices();
+    resetInvoiceDraft();
+  }
+
+  /* ---------------------------
+      DELETE INVOICE -> Firestore
+  ----------------------------*/
+  async function deleteInvoiceFirestore(id) {
+    if (!confirm("Supprimer cette facture ?")) return;
+    await deleteDoc(doc(db, "invoices", id));
+    loadInvoices();
+  }
+
+  /* ---------------------------
+      UPDATE PAYMENT (local + firestore)
+  ----------------------------*/
+  async function editInvoicePayment(inv) {
+    const nouveauPaiement = Number(prompt("Montant payé par le client (en Ariary) :", inv.paid || 0));
     if (isNaN(nouveauPaiement)) return alert("Montant invalide !");
-
-    const newInvoices = invoices.map((f) =>
-      f.id === inv.id ? { ...f, paid: nouveauPaiement } : f
-    );
-
-    setInvoices(newInvoices);
+    // update firestore
+    await updateDoc(doc(db, "invoices", inv.id), { paid: nouveauPaiement });
+    loadInvoices();
     alert("Paiement mis à jour !");
   }
 
   /* ---------------------------
-      FUNCTION : FORMAT MG (prix)
+      HELPERS : format & totals
   ----------------------------*/
   function formatMG(num) {
     return Number(num || 0).toLocaleString("fr-FR") + " MGA";
   }
 
-  /* ---------------------------
-      CONVERSION NOMBRE → MOTS
-  ----------------------------*/
+  function formatCurrency(n) {
+    return Number(n || 0).toFixed(2);
+  }
+
   function numberToWordsMG(num) {
+    // same small utility as earlier; keep simple
     const unités = ["zéro","un","deux","trois","quatre","cinq","six","sept","huit","neuf"];
     const dizaines = ["","dix","vingt","trente","quarante","cinquante","soixante"];
-
     if (num < 10) return unités[num];
     if (num < 70) {
       let d = Math.floor(num / 10);
@@ -316,232 +376,177 @@ function logout() {
       let r = num % 1000;
       return numberToWordsMG(m) + " mille " + (r > 0 ? numberToWordsMG(r) : "");
     }
-    return num.toString();
+    return String(num);
   }
 
-  /* ---------------------------
-      GÉNÉRATION PDF (corrigée)
-  ----------------------------*/
-  function generateInvoicePDF(inv) {
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    let y = 40;
-    const margin = 20;
-
-    // Récupération client
-    const client = clients.find(c => c.id === inv.clientId);
-    if (!client) return alert("Client introuvable !");
-
-    function parsePrice(value) {
-      if (!value) return 0;
-      return Number(String(value).replace(/\D/g, "")) || 0;
-    }
-
-    const total = inv.items.reduce(
-      (a, b) => a + (b.qty || 0) * parsePrice(b.price),
-      0
-    );
-    const paid = inv.paid || 0;
-    const rest = total - paid;
-
-    // 🏢 EN-TÊTE ENTREPRISE
-    doc.setFontSize(12);
-    doc.text(company.name || "", margin, y); y += 16;
-    doc.text(`NIF : ${company.nif}   STAT : ${company.stat}`, margin, y); y += 16;
-    doc.text(`Adresse : ${company.address || ""}`, margin, y); y += 16;
-    doc.text(`Contact : ${company.contact || ""}`, margin, y); y += 26;
-
-    // TITRE FACTURE
-    doc.setFontSize(16);
-    doc.text(
-      inv.type === "proforma" ? "FACTURE PROFORMA" : "FACTURE COMMERCIALE",
-      margin,
-      y
-    );
-    y += 26;
-
-    // --- INFO FACTURE + LIVRAISON ---
-    doc.setFontSize(11);
-    let leftX = 10;
-    let rightX = 300;
-
-    doc.text(`Date facture : ${inv.date}`, leftX, y);
-    doc.text(`Facture No : ${inv.number}`, rightX, y);
-    y += 16;
-
-    doc.text(`Date de livraison : ${inv.deliveryDate || "Non définie"}`, rightX, y);
-    y += 16;
-
-    doc.text(`Lieu de livraison : ${inv.deliveryAddress || "Non défini"}`, rightX, y);
-    y += 20;
-
-    // CLIENT
-    doc.setFontSize(13);
-    doc.text("D o i t :", margin, y); y += 16;
-    doc.setFontSize(12);
-    doc.text(client.name, margin, y); y += 16;
-    doc.text(client.address || "", margin, y); y += 16;
-    doc.text(client.phone || "", margin, y); y += 26;
-
-    // TABLEAU
-    doc.line(margin, y, 550, y);
-    y += 14;
-
-    doc.text("Quantité", margin, y);
-    doc.text("Désignation", margin + 80, y);
-    doc.text("Prix unitaire", margin + 260, y);
-    doc.text("Montant Total", margin + 400, y);
-    y += 10;
-
-    doc.line(margin, y, 550, y);
-    y += 14;
-
-    inv.items.forEach((item) => {
-      const montant = (item.qty || 0) * parsePrice(item.price);
-
-      doc.text(String(item.qty), margin, y);
-      doc.text(item.name, margin + 80, y);
-      doc.text(formatMG(item.price), margin + 260, y);
-      doc.text(formatMG(montant), margin + 390, y);
-
-      y += 16;
-    });
-
-    // TOTAUX
-    doc.line(margin, y, 550, y);
-    y += 20;
-
-    doc.text("Total:", margin + 320, y);
-    doc.text(formatMG(total), margin + 390, y); y += 16;
-
-    doc.text("Payé:", margin + 320, y);
-    doc.text(formatMG(paid), margin + 390, y); y += 16;
-
-    doc.text("Reste:", margin + 320, y);
-    doc.text(formatMG(rest), margin + 390, y); y += 26;
-
-    // TEXTE FINAL
-    const typeLabel = inv.type === "proforma" ? "Proforma" : "Commerciale";
-    const texteFinal =
-      "Arrêtée la présente facture " +
-      typeLabel +
-      " à la somme : " +
-      numberToWordsMG(total) +
-      " Ariary";
-
-    doc.text(texteFinal, margin, y);
-    y += 26;
-
-    doc.text("Merci pour votre confiance.", margin, y);
-
-    doc.save(inv.number + ".pdf");
-  }
-
-  /* ---------------------------
-      FILTRES FACTURES
-  ----------------------------*/
-  const filteredProducts = products.filter(p =>
-  p.name.toLowerCase().includes(productSearch.toLowerCase())
-);
-  const filteredInvoices = invoices.filter(inv =>
-    inv.number?.toLowerCase().includes(invoiceSearch.toLowerCase())
-  );
-
-  /* ---------------------------
-      TOTALS (jour & mois)
-  ----------------------------*/
   function totals() {
     const today = new Date().toISOString().slice(0, 10);
     const month = new Date().toISOString().slice(0, 7);
 
     const dayTotal = invoices
-      .filter((i) => i.date === today)
-      .reduce(
-        (s, inv) => s + inv.items.reduce((a, b) => a + (b.qty || 0) * b.price, 0),
-        0
-      );
+      .filter(i => i.date === today)
+      .reduce((s, inv) => s + inv.items.reduce((a,b)=> a + (b.qty||0)*(b.price||0), 0), 0);
 
     const monthTotal = invoices
-      .filter((i) => i.date.slice(0, 7) === month)
-      .reduce(
-        (s, inv) => s + inv.items.reduce((a, b) => a + (b.qty || 0) * b.price, 0),
-        0
-      );
+      .filter(i => i.date && i.date.slice(0,7) === month)
+      .reduce((s, inv) => s + inv.items.reduce((a,b)=> a + (b.qty||0)*(b.price||0), 0), 0);
 
     return { dayTotal, monthTotal };
   }
 
-  /* ============================
-      PARTIE 3 — UI / RENDER & PETITS HELPERS
-  ============================ */
-
-  // --- Simple helpers ---
-  function formatCurrency(n) {
-    return Number(n || 0).toFixed(2);
+  /* ---------------------------
+      GENERATE PDF (invoice)
+  ----------------------------*/
+  function parsePrice(value) {
+    if (!value) return 0;
+    return Number(String(value).replace(/\D/g, "")) || 0;
   }
 
-if (!logged) {
-  return <Login onLogin={() => setLogged(true)} />;
-}
+  function generateInvoicePDF(inv) {
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    let y = 40;
+    const margin = 20;
+
+    const client = clients.find(c => c.id === inv.clientId);
+    if (!client) { alert("Client introuvable"); return; }
+
+    const total = inv.items.reduce((a,b) => a + (b.qty||0)*parsePrice(b.price), 0);
+    const paid = inv.paid || 0;
+    const rest = total - paid;
+
+    doc.setFontSize(12);
+    doc.text(company.name || "", margin, y); y+=16;
+    doc.text(`NIF : ${company.nif}   STAT : ${company.stat}`, margin, y); y+=16;
+    doc.text(`Adresse : ${company.address || ""}`, margin, y); y+=16;
+    doc.text(`Contact : ${company.contact || ""}`, margin, y); y+=26;
+
+    doc.setFontSize(16);
+    doc.text(inv.type === "proforma" ? "FACTURE PROFORMA" : "FACTURE COMMERCIALE", margin, y);
+    y += 26;
+
+    doc.setFontSize(11);
+    const leftX = 10, rightX = 300;
+    doc.text(`Date facture : ${inv.date}`, leftX, y);
+    doc.text(`Facture No : ${inv.number}`, rightX, y);
+    y += 16;
+    doc.text(`Date de livraison : ${inv.deliveryDate || "Non définie"}`, rightX, y); y+=16;
+    doc.text(`Lieu de livraison : ${inv.deliveryAddress || "Non défini"}`, rightX, y); y+=20;
+
+    doc.setFontSize(13);
+    doc.text("D o i t :", margin, y); y+=16;
+    doc.setFontSize(12);
+    doc.text(client.name, margin, y); y+=16;
+    doc.text(client.address || "", margin, y); y+=16;
+    doc.text(client.phone || "", margin, y); y+=26;
+
+    doc.line(margin, y, 550, y); y+=14;
+    doc.text("Quantité", margin, y);
+    doc.text("Désignation", margin + 80, y);
+    doc.text("Prix unitaire", margin + 260, y);
+    doc.text("Montant Total", margin + 400, y); y+=10;
+    doc.line(margin, y, 550, y); y+=14;
+
+    inv.items.forEach(item => {
+      const montant = (item.qty || 0) * parsePrice(item.price);
+      doc.text(String(item.qty), margin, y);
+      doc.text(item.name, margin + 80, y);
+      doc.text(formatMG(item.price), margin + 260, y);
+      doc.text(formatMG(montant), margin + 390, y);
+      y += 16;
+    });
+
+    doc.line(margin, y, 550, y); y+=20;
+    doc.text("Total", margin + 320, y);
+    doc.text(formatMG(total), margin + 390, y); y+=16;
+    doc.text("Payé", margin + 320, y);
+    doc.text(formatMG(paid), margin + 390, y); y+=16;
+    doc.text("Reste", margin + 320, y);
+    doc.text(formatMG(rest), margin + 390, y); y+=26;
+
+    const typeLabel = inv.type === "proforma" ? "Proforma" : "Commerciale";
+    const texteFinal = "Arrêtée la présente facture " + typeLabel + " à la somme : " + numberToWordsMG(total) + " Ariary";
+    doc.text(texteFinal, margin, y); y+=26;
+    doc.text("Merci pour votre confiance.", margin, y);
+
+    doc.save((inv.number || "invoice") + ".pdf");
+  }
+
+  /* ---------------------------
+      FILTERS (computed)
+  ----------------------------*/
+  const filteredProducts = products.filter(p =>
+    (p.name || "").toLowerCase().includes((productSearch || "").toLowerCase())
+  );
+
+  const filteredInvoices = invoices.filter(inv =>
+    (inv.number || "").toLowerCase().includes((invoiceSearch || "").toLowerCase())
+  );
+
+  /* ============================
+      FIN PARTIE 2 — UI DANS PARTIE 3
+  ============================ */
+/* ============================
+   PARTIE 3 — UI / RENDER (à coller après PARTIE 2)
+   ============================ */
+
+  // if user not logged, show Login (Login doit appeler onLogin prop)
+  if (!logged) {
+    return <Login onLogin={() => setLogged(true)} />;
+  }
 
   // --- UI / RENDER ---
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800">
-    {/* Bouton déconnexion FIXÉ EN HAUT DROIT */}
-    <button
-      onClick={logout}
-      className="fixed top-4 right-4 bg-white shadow-lg p-3 rounded-full hover:bg-gray-100 z-50"
-      title="Déconnexion"
-    >
-      <FiLogOut size={22} />
-    </button>
+      {/* Bouton déconnexion flottant en haut à droite */}
+      <button
+        onClick={logout}
+        className="fixed top-4 right-4 bg-white shadow-lg p-3 rounded-full hover:bg-gray-100 z-50"
+        title="Déconnexion"
+      >
+        <FiLogOut size={22} />
+      </button>
 
-    <div className="flex">
-      <aside className="w-72 bg-indigo-900 text-white min-h-screen p-6">
+      <div className="flex">
+        {/* SIDEBAR */}
+        <aside className="w-72 bg-indigo-900 text-white min-h-screen p-6">
           <div className="text-2xl font-bold mb-6">MadaPerfect</div>
+
           <nav className="space-y-3">
-            <button onClick={() => setView('dashboard')} className={`w-full text-left px-3 py-2 rounded ${view==='dashboard' ? 'bg-indigo-700' : ''}`}>Tableau de bord</button>
-            <button onClick={() => setView('articles')} className={`w-full text-left px-3 py-2 rounded ${view==='articles' ? 'bg-indigo-700' : ''}`}>Articles</button>
-            <button onClick={() => setView('invoices')} className={`w-full text-left px-3 py-2 rounded ${view==='invoices' ? 'bg-indigo-700' : ''}`}>Factures</button>
-            <button onClick={() => setView('clients')} className={`w-full text-left px-3 py-2 rounded ${view==='clients' ? 'bg-indigo-700' : ''}`}>Clients</button>
-            <button onClick={() => setView('settings')} className={`w-full text-left px-3 py-2 rounded ${view==='settings' ? 'bg-indigo-700' : ''}`}>Paramètres</button>
+            <button onClick={() => setView("dashboard")} className={`w-full text-left px-3 py-2 rounded ${view==='dashboard' ? 'bg-indigo-700' : ''}`}>Tableau de bord</button>
+            <button onClick={() => setView("articles")} className={`w-full text-left px-3 py-2 rounded ${view==='articles' ? 'bg-indigo-700' : ''}`}>Articles</button>
+            <button onClick={() => setView("invoices")} className={`w-full text-left px-3 py-2 rounded ${view==='invoices' ? 'bg-indigo-700' : ''}`}>Factures</button>
+            <button onClick={() => setView("clients")} className={`w-full text-left px-3 py-2 rounded ${view==='clients' ? 'bg-indigo-700' : ''}`}>Clients</button>
+            <button onClick={() => setView("settings")} className={`w-full text-left px-3 py-2 rounded ${view==='settings' ? 'bg-indigo-700' : ''}`}>Paramètres</button>
           </nav>
+
+          {/* Nom Admin en bas de sidebar */}
+          <div className="mt-6 text-sm text-indigo-100">Connecté : <strong>Admin</strong></div>
         </aside>
 
+        {/* MAIN */}
         <main className="flex-1 p-6">
-
-          <div className="flex justify-between items-center mb-6">
-  <h1 className="text-2xl font-bold">MadaPerfect</h1>
-
-  <button
-    onClick={logout}
-    className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-  >
-    Déconnexion
-  </button>
-</div>
-
-          {/* Header + search */}
+          {/* Header (title + search + user) */}
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-semibold">
-              {view === 'dashboard' ? 'Tableau de bord' :
-               view === 'articles' ? 'Articles' :
-               view === 'invoices' ? 'Factures' :
-               view === 'clients' ? 'Clients' : 'Paramètres'}
+              {view === "dashboard" ? "Tableau de bord" :
+               view === "articles" ? "Articles" :
+               view === "invoices" ? "Factures" :
+               view === "clients" ? "Clients" : "Paramètres"}
             </h1>
 
             <div className="flex items-center gap-4">
               <input
-                placeholder={view === 'invoices' ? 'Recherche numéro de facture' : 'Recherche...'}
-                value={view === 'invoices' ? invoiceSearch : productSearch}
-                onChange={e => view==='invoices' ? setInvoiceSearch(e.target.value) : setProductSearch(e.target.value)}
+                placeholder={view === "invoices" ? "Recherche numéro de facture" : "Recherche..."}
+                value={view === "invoices" ? invoiceSearch : productSearch}
+                onChange={e => view === "invoices" ? setInvoiceSearch(e.target.value) : setProductSearch(e.target.value)}
                 className="px-3 py-2 rounded border"
               />
-              <div className="text-sm text-gray-600">Utilisateur • Admin</div>
+              <div className="text-sm text-gray-600">Utilisateur • <strong>Admin</strong></div>
             </div>
           </div>
 
-          {/* === DASHBOARD === */}
-          {view === 'dashboard' && (
+          {/* DASHBOARD */}
+          {view === "dashboard" && (
             <div>
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <StatCard title="Ventes du jour" value={`${formatCurrency(totals().dayTotal)} AR`} />
@@ -559,7 +564,14 @@ if (!logged) {
                       {invoices.slice().reverse().map(inv => {
                         const total = inv.items.reduce((a,b)=>a+(b.qty||0)*(b.price||0),0);
                         const client = clients.find(c => c.id === inv.clientId);
-                        return (<tr key={inv.id} className="border-t"><td className="py-2">{inv.number}</td><td>{inv.date}</td><td>{client?.name}</td><td>{formatCurrency(total)}</td></tr>);
+                        return (
+                          <tr key={inv.id} className="border-t">
+                            <td className="py-2">{inv.number}</td>
+                            <td>{inv.date}</td>
+                            <td>{client?.name}</td>
+                            <td>{formatCurrency(total)}</td>
+                          </tr>
+                        );
                       })}
                     </tbody>
                   </table>
@@ -575,8 +587,8 @@ if (!logged) {
             </div>
           )}
 
-          {/* === ARTICLES === */}
-          {view === 'articles' && (
+          {/* ARTICLES */}
+          {view === "articles" && (
             <div className="grid grid-cols-3 gap-6">
               <div className="col-span-2 bg-white p-4 rounded shadow">
                 <h3 className="font-semibold mb-4">Liste des produits</h3>
@@ -596,6 +608,7 @@ if (!logged) {
                         <div className="flex gap-2 mt-2 justify-end">
                           <button onClick={() => startEditProduct(p)} className="px-3 py-1 bg-yellow-400 rounded text-sm">Modifier</button>
                           <button onClick={() => deleteProduct(p.id)} className="px-3 py-1 bg-red-500 rounded text-sm text-white">Supprimer</button>
+                          <button onClick={()=>editInvoice(inv)} className="px-2 py-1 bg-green-600 text-white rounded">Paiement</button>
                         </div>
                       </div>
                     </div>
@@ -620,8 +633,8 @@ if (!logged) {
             </div>
           )}
 
-          {/* === CLIENTS === */}
-          {view === 'clients' && (
+          {/* CLIENTS */}
+          {view === "clients" && (
             <div className="grid grid-cols-3 gap-6">
               <div className="col-span-2 bg-white p-4 rounded shadow">
                 <h3 className="font-semibold mb-3">Liste des clients</h3>
@@ -629,24 +642,38 @@ if (!logged) {
                   <thead className="text-left"><tr><th>Nom</th><th>Email</th><th>Téléphone</th><th></th></tr></thead>
                   <tbody>
                     {clients.map(c => (
-                      <tr key={c.id} className="border-t"><td className="py-2">{c.name}</td><td>{c.email}</td><td>{c.phone}</td><td><div className="flex gap-2"><button onClick={()=>editClient(c)} className="px-2 py-1 bg-yellow-400 rounded">Modifier</button><button onClick={()=>deleteClient(c.id)} className="px-2 py-1 bg-red-500 text-white rounded">Supprimer</button></div></td></tr>
+                      <tr key={c.id} className="border-t">
+                        <td className="py-2">{c.name}</td>
+                        <td>{c.email}</td>
+                        <td>{c.phone}</td>
+                        <td>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setClientForm(c); setView('clients'); }} className="px-2 py-1 bg-yellow-400 rounded">Modifier</button>
+                            <button onClick={() => deleteClientFirestore(c.id)} className="px-2 py-1 bg-red-500 text-white rounded">Supprimer</button>
+                          </div>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
               <div className="bg-white p-4 rounded shadow">
                 <h3 className="font-semibold mb-3">Ajouter client</h3>
                 <input value={clientForm.name} onChange={e=>setClientForm(f=>({...f, name: e.target.value}))} placeholder="Nom" className="w-full px-2 py-2 border rounded mb-2" />
                 <input value={clientForm.email} onChange={e=>setClientForm(f=>({...f, email: e.target.value}))} placeholder="Email" className="w-full px-2 py-2 border rounded mb-2" />
                 <input value={clientForm.phone} onChange={e=>setClientForm(f=>({...f, phone: e.target.value}))} placeholder="Téléphone" className="w-full px-2 py-2 border rounded mb-2" />
                 <input value={clientForm.address || ''} onChange={e=>setClientForm(f=>({...f, address: e.target.value}))} placeholder="Adresse du client" className="w-full px-2 py-2 border rounded mb-2" />
-                <div className="flex gap-2"><button onClick={saveClient} className="px-3 py-2 bg-indigo-600 text-white rounded">Enregistrer</button><button onClick={()=>setClientForm(emptyClient)} className="px-3 py-2 border rounded">Annuler</button></div>
+                <div className="flex gap-2">
+                  <button onClick={saveClientFirestore} className="px-3 py-2 bg-indigo-600 text-white rounded">Enregistrer</button>
+                  <button onClick={()=> setClientForm({ id:null, name:'', email:'', phone:'', address:'' })} className="px-3 py-2 border rounded">Annuler</button>
+                </div>
               </div>
             </div>
           )}
 
-          {/* === FACTURES === */}
-          {view === 'invoices' && (
+          {/* FACTURES */}
+          {view === "invoices" && (
             <div className="grid grid-cols-3 gap-6">
               <div className="col-span-2 bg-white p-4 rounded shadow">
                 <h3 className="font-semibold mb-3">{editingInvoice ? 'Modifier facture' : 'Créer facture'}</h3>
@@ -658,7 +685,7 @@ if (!logged) {
                 </select>
 
                 <label className="block">Client</label>
-                <select value={invoiceDraft.clientId||''} onChange={e=>setInvoiceDraft(d=>({...d, clientId: Number(e.target.value)}))} className="w-full px-2 py-2 border rounded mb-2">
+                <select value={invoiceDraft.clientId||''} onChange={e=>setInvoiceDraft(d=>({...d, clientId: e.target.value ? (isNaN(e.target.value) ? e.target.value : Number(e.target.value)) : null }))} className="w-full px-2 py-2 border rounded mb-2">
                   <option value="">-- Choisir client --</option>
                   {clients.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -692,9 +719,9 @@ if (!logged) {
 
                 <div className="flex gap-2">
                   {editingInvoice ? (
-                    <button onClick={updateInvoice} className="px-3 py-2 bg-yellow-600 text-white rounded">Enregistrer les modifications</button>
+                    <button onClick={updateInvoiceFirestore} className="px-3 py-2 bg-yellow-600 text-white rounded">Enregistrer les modifications</button>
                   ) : (
-                    <button onClick={saveInvoice} className="px-3 py-2 bg-cyan-600 text-white rounded">Générer facture</button>
+                    <button onClick={saveInvoiceFirestore} className="px-3 py-2 bg-cyan-600 text-white rounded">Générer facture</button>
                   )}
                   <button onClick={()=>{ resetInvoiceDraft(); setEditingInvoice(false); }} className="px-3 py-2 border rounded">Annuler</button>
                 </div>
@@ -716,7 +743,7 @@ if (!logged) {
                           <div className="font-semibold">{formatMG(total)}</div>
                           <button onClick={()=>generateInvoicePDF(inv)} className="px-2 py-1 bg-yellow-600 text-white rounded">PDF</button>
                           <button onClick={()=>startEditInvoice(inv)} className="px-2 py-1 bg-green-500 text-white rounded">Modifier</button>
-                          <button onClick={()=>editInvoice(inv)} className="px-2 py-1 bg-red-600 text-white rounded">Paiement</button>
+                          <button onClick={()=>editInvoicePayment(inv)} className="px-2 py-1 bg-red-600 text-white rounded">Paiement</button>
                         </div>
                       </div>
                     );
@@ -726,8 +753,8 @@ if (!logged) {
             </div>
           )}
 
-          {/* === PARAMÈTRES === */}
-          {view === 'settings' && (
+          {/* PARAMÈTRES */}
+          {view === "settings" && (
             <div className="bg-white p-4 rounded shadow max-w-xl">
               <h3 className="font-semibold mb-3">Paramètres de l'entreprise</h3>
               <input value={company.name} onChange={e=>setCompany({...company, name:e.target.value})} placeholder="Nom entreprise" className="w-full px-3 py-2 border rounded mb-2" />
@@ -744,9 +771,7 @@ if (!logged) {
       </div>
     </div>
   );
-
 } // <-- FIN de la fonction MadaPerfectApp
-
 
 // -------- STAT CARD --------
 function StatCard({ title, value }){
@@ -755,5 +780,5 @@ function StatCard({ title, value }){
       <div className="text-sm text-gray-500">{title}</div>
       <div className="text-xl font-bold mt-2">{value}</div>
     </div>
-  )
+  );
 }
