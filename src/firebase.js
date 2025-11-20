@@ -1,20 +1,17 @@
-// Import Firebase SDK
+// PARTIE 1 - firebase.js
+// place ce fichier dans src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyCQ_d8utjf2wj2MgNhrloSBrnZ9Qo8cs",
-  authDomain: "madaperfect-11420.firebaseapp.com",
-  projectId: "madaperfect-11420",
-  storageBucket: "madaperfect-11420.firebasestorage.app",
-  messagingSenderId: "812266852874",
-  appId: "1:812266852874:web:38622eedae5f1aaf45f3",
-  measurementId: "G-V7TSHVRVD1"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID",
+  // measurementId: "OPTIONAL"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-// Export Firestore database
 export const db = getFirestore(app);
