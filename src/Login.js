@@ -1,53 +1,77 @@
-// PARTIE 1 - Login.js
-// place ce fichier dans src/Login.js
+// src/Login.js
 import React, { useState } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "./firebase";
 
 export default function Login({ onLogin }) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // Simple Login 1: vérifie collection "users" (doc par user, champs username/password)
-  async function handleSubmit(e) {
-    e?.preventDefault();
-    setLoading(true);
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError("");
+
     try {
       const q = query(
         collection(db, "users"),
-        where("username", "==", username),
+        where("email", "==", email),
         where("password", "==", password)
       );
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        // ok
-        localStorage.setItem("mp_logged", "yes");
-        onLogin();
-      } else {
-        alert("Utilisateur ou mot de passe invalide.");
+
+      if (snap.empty) {
+        setError("Identifiants incorrects");
+        return;
       }
+
+      const userDoc = snap.docs[0].data();
+      const role = userDoc.role || "employee";
+
+      // store login info locally
+      localStorage.setItem("mp_logged", "yes");
+      localStorage.setItem("mp_role", role);
+      localStorage.setItem("mp_email", userDoc.email || "");
+
+      // callback to parent
+      onLogin({ role, email: userDoc.email || "" });
     } catch (err) {
       console.error(err);
-      alert("Erreur connexion.");
-    } finally {
-      setLoading(false);
+      setError("Erreur lors de la connexion");
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form onSubmit={handleSubmit} className="w-96 bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-semibold mb-4">Connexion MadaPerfect</h2>
-        <label className="block text-sm">Identifiant</label>
-        <input className="w-full border px-3 py-2 mb-3" value={username} onChange={e=>setUsername(e.target.value)} />
-        <label className="block text-sm">Mot de passe</label>
-        <input type="password" className="w-full border px-3 py-2 mb-4" value={password} onChange={e=>setPassword(e.target.value)} />
-        <div className="flex justify-end">
-          <button disabled={loading} className="px-4 py-2 bg-indigo-600 text-white rounded">
-            {loading ? "..." : "Se connecter"}
-          </button>
-        </div>
+    <div className="h-screen flex items-center justify-center bg-gray-100">
+      <form
+        onSubmit={handleLogin}
+        className="bg-white p-6 rounded shadow w-96"
+      >
+        <h2 className="text-2xl font-bold mb-4">Connexion</h2>
+
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full mb-3 p-2 border rounded"
+          required
+        />
+
+        <input
+          type="password"
+          placeholder="Mot de passe"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full mb-3 p-2 border rounded"
+          required
+        />
+
+        {error && <div className="text-red-500 mb-3">{error}</div>}
+
+        <button className="w-full bg-indigo-600 text-white py-2 rounded">
+          Connexion
+        </button>
       </form>
     </div>
   );

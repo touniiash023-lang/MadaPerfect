@@ -2,24 +2,19 @@
   "name": "madaperfect",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "start": "cross-env PORT=4002 react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test"
-  },
   "dependencies": {
-    "firebase": "^12.6.0",
+    "firebase": "^10.14.1",
     "jspdf": "^2.5.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-icons": "^5.5.0"
+    "react-icons": "^4.12.0",
+    "react-scripts": "5.0.1"
   },
-  "devDependencies": {
-    "autoprefixer": "^10.4.22",
-    "cross-env": "^7.0.3",
-    "postcss": "^8.5.6",
-    "react-scripts": "^5.0.1",
-    "tailwindcss": "^3.4.18"
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "browserslist": {
     "production": [
@@ -32,5 +27,10 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17"
   }
 }
