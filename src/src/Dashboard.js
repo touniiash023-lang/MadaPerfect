@@ -1,1 +1,0 @@
-export default function Dashboard(){return <h1>Dashboard prêt</h1>}

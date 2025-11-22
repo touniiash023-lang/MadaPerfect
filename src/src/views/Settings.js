@@ -1,1 +1,0 @@
-export default function Settings(){return <h1>Paramètres prêts</h1>}
